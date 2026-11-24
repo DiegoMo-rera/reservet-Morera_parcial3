@@ -654,3 +654,6 @@ form input {
     transition: none !important;
   }
 }
+[hidden] {
+  display: none !important;
+}

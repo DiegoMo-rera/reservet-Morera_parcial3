@@ -5,11 +5,20 @@ const $ = (selector) => document.querySelector(selector);
 const statuses = ['available', 'occupied', 'out_of_service'];
 let lastNotice = null;
 let formError = null;
+let loginError = null;
 const translatedError = (key, values = {}) =>
   Object.assign(new Error(t(key, values)), { key, values });
 const showFormError = (error = null) => {
   formError = error;
   $('#form-error').textContent = error
+    ? error.key
+      ? t(error.key, error.values)
+      : error.message
+    : '';
+};
+const showLoginError = (error = null) => {
+  loginError = error;
+  $('#login-error').textContent = error
     ? error.key
       ? t(error.key, error.values)
       : error.message
@@ -68,6 +77,7 @@ let demoTables = [
   },
 ];
 let tables = [];
+let currentUser = null;
 let busy = false;
 let loadError = '';
 const isDemo = () => $('#source').value === 'demo';
@@ -77,11 +87,22 @@ const notice = (key = '', error = false, values = {}) => {
   $('#notice').className = `notice${error ? ' error' : ''}`;
 };
 
+function updateAuthUI() {
+  const apiMode = !isDemo();
+  $('#auth-bar').hidden = !apiMode || !currentUser;
+  $('#login-panel').hidden = !apiMode || Boolean(currentUser);
+  $('#auth-user').textContent = currentUser
+    ? t('signedInAs', { username: currentUser.username })
+    : '';
+  $('#login-submit').textContent = t(busy ? 'loggingIn' : 'loginButton');
+}
+
 async function request(path, options = {}) {
   let response;
   try {
     response = await fetch(path, {
       ...options,
+      credentials: 'same-origin',
       signal: AbortSignal.timeout(10000),
       headers: { 'Content-Type': 'application/json' },
     });
@@ -90,6 +111,11 @@ async function request(path, options = {}) {
   }
   const body = await response.json().catch(() => null);
   if (!response.ok) {
+    if (response.status === 401) {
+      currentUser = null;
+      updateAuthUI();
+      throw translatedError(path === '/api/auth/login' ? 'invalidCredentials' : 'authRequired');
+    }
     if (response.status === 404) throw translatedError('notFound', { path });
     throw translatedError(response.status === 409 ? 'duplicate' : 'httpError', {
       status: response.status,
@@ -122,10 +148,13 @@ function setBusy(value) {
     '#save-table',
     '#close-dialog',
     '#cancel-dialog',
+    '#login-submit',
+    '#logout-btn',
   ])
     $(selector).disabled = value;
   $('#tables').setAttribute('aria-busy', String(value));
   $('#save-table').textContent = t(value ? 'saving' : 'save');
+  updateAuthUI();
   document.querySelectorAll('.card-bottom select').forEach((select) => {
     select.disabled = value;
   });
@@ -138,7 +167,7 @@ function render() {
   $('#total').textContent = tables.length;
   for (const status of statuses)
     $(`#${status}`).textContent = tables.filter((table) => table.status === status).length;
-  const query = $('#search').value.trim();
+  const query = $('#search').value.trim().toLocaleLowerCase(locale());
   const filtered = tables.filter(
     (table) =>
       displayName(table).toLocaleLowerCase(locale()).includes(query) &&
@@ -192,6 +221,15 @@ async function load() {
   render();
   notice('loading');
   try {
+    if (!isDemo()) {
+      try {
+        const me = await request('/api/auth/me');
+        currentUser = me.user;
+      } catch (authError) {
+        if (authError.key !== 'notFound') throw authError;
+      }
+    }
+    updateAuthUI();
     const result = isDemo() ? structuredClone(demoTables) : await request('/api/tables');
     if (
       !Array.isArray(result) ||
@@ -253,7 +291,7 @@ $('#table-form').addEventListener('submit', async (event) => {
   const name = $('#table-name').value.trim();
   const capacity = Number($('#table-capacity').value);
   showFormError();
-  if (!name || name.length > 80 || !Number.isInteger(capacity) || capacity < 1 || capacity >= 20) {
+  if (!name || name.length > 80 || !Number.isInteger(capacity) || capacity < 1 || capacity > 20) {
     showFormError(translatedError('validation'));
     return;
   }
@@ -290,8 +328,48 @@ $('#table-form').addEventListener('submit', async (event) => {
     render();
   }
 });
+$('#login-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (busy) return;
+  showLoginError();
+  setBusy(true);
+  try {
+    const data = await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: $('#login-username').value.trim(),
+        password: $('#login-password').value,
+      }),
+    });
+    currentUser = data.user;
+    $('#login-form').reset();
+    updateAuthUI();
+  } catch (error) {
+    showLoginError(error);
+    setBusy(false);
+    return;
+  }
+  setBusy(false);
+  await load();
+});
+$('#logout-btn').addEventListener('click', async () => {
+  if (busy) return;
+  setBusy(true);
+  try {
+    await request('/api/auth/logout', { method: 'POST' });
+  } finally {
+    currentUser = null;
+    tables = [];
+    loadError = '';
+    setBusy(false);
+    updateAuthUI();
+    notice('loggedOut');
+    render();
+  }
+});
 $('#source').addEventListener('change', () => {
   $('#mode-description').textContent = t(isDemo() ? 'demoDescription' : 'apiDescription');
+  showLoginError();
   void load();
 });
 $('#refresh').addEventListener('click', () => void load());
@@ -306,6 +384,7 @@ function updateLanguage() {
   render();
   if (lastNotice) notice(lastNotice.key, lastNotice.error, lastNotice.values);
   showFormError(formError);
+  showLoginError(loginError);
 }
 $('#language').addEventListener('change', updateLanguage);
 applyLanguage();

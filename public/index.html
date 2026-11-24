@@ -14,7 +14,7 @@
       >
       <p class="eyebrow">TU RESTAURANTE, EN ORDEN</p>
       <nav aria-label="Navegación principal">
-        <a href="/" aria-current="page"><span>▦</span> Gestión de mesas</a>
+        <a href="/" aria-current="page"><span>⊞</span> Gestión de mesas</a>
       </nav>
       <div class="sidebar-note">
         <span class="small-dot"></span> Espacio de práctica
@@ -24,8 +24,12 @@
     <main>
       <header class="topbar">
         <span>Restaurante / <strong>Salón principal</strong></span
-        ><span class="workspace">R <span>Reservet · Desarrollo</span></span
-        ><label class="language-picker"
+        ><span class="workspace">R <span>Reservet · Desarrollo</span></span>
+        <div class="auth-bar" id="auth-bar" hidden>
+          <span id="auth-user"></span>
+          <button type="button" class="secondary" id="logout-btn">Salir</button>
+        </div>
+        <label class="language-picker"
           ><span id="language-label">Idioma</span
           ><select id="language" aria-label="Idioma">
             <option value="es">Español</option>
@@ -55,6 +59,31 @@
             <option value="api">Mi API local</option>
           </select></label
         >
+      </section>
+      <section class="connection" id="login-panel" aria-labelledby="login-title" hidden>
+        <div>
+          <strong id="login-title">Iniciar sesión</strong>
+          <p id="login-hint">
+            Accede con tu usuario del restaurante para gestionar tus mesas en la API.
+          </p>
+        </div>
+        <form id="login-form" class="toolbar">
+          <label
+            ><span id="login-username-label">Usuario</span
+            ><input id="login-username" name="username" required autocomplete="username"
+          /></label>
+          <label
+            ><span id="login-password-label">Contraseña</span
+            ><input
+              id="login-password"
+              name="password"
+              type="password"
+              required
+              autocomplete="current-password"
+          /></label>
+          <button type="submit" class="primary" id="login-submit">Entrar</button>
+          <p id="login-error" role="alert" class="form-error"></p>
+        </form>
       </section>
       <section class="stats" aria-label="Resumen del salón">
         <article>
